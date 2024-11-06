@@ -14,13 +14,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.dicoding.asclepius.R
 import android.graphics.Color
+import androidx.activity.viewModels
 import com.dicoding.asclepius.databinding.ActivityMainBinding
 import com.yalantis.ucrop.UCrop
 import org.tensorflow.lite.task.vision.classifier.Classifications
 import java.io.File
 
+@Suppress("DEPRECATION")
 class MainActivity : AppCompatActivity(), ImageClassifierHelper.ClassifierListener {
     private lateinit var binding: ActivityMainBinding
+
+    private val viewModel: MainViewModel by viewModels()
 
     private var currentImageUri: Uri? = null
     private lateinit var imageClassifierHelper: ImageClassifierHelper
@@ -29,6 +33,42 @@ class MainActivity : AppCompatActivity(), ImageClassifierHelper.ClassifierListen
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        if (savedInstanceState != null) {
+            currentImageUri = savedInstanceState.getParcelable(KEY_IMAGE_URI)
+            val result = savedInstanceState.getString(KEY_CLASSIFICATION_RESULT)
+            val confidence = savedInstanceState.getFloat(KEY_CLASSIFICATION_CONFIDENCE, -1f)
+
+            result?.let {
+                viewModel.classificationResult(it, confidence)
+            }
+        }
+
+
+        viewModel.currentImageUri.observe(this) { uri ->
+            currentImageUri = uri
+            showImage()
+        }
+
+        viewModel.progressVisibility.observe(this) { visibility ->
+            binding.progressIndicator.visibility = visibility
+        }
+
+        viewModel.classificationResult.observe(this) { result ->
+            val detectedResult = result.first
+            val confidenceScore = result.second
+
+            if (confidenceScore != -1f) {
+                val intent = Intent(this, ResultActivity::class.java).apply {
+                    putExtra(ResultActivity.EXTRA_IMAGE_URI, currentImageUri.toString())
+                    putExtra(ResultActivity.EXTRA_RESULT, detectedResult)
+                    putExtra(ResultActivity.EXTRA_CONFIDENCE_SCORE, confidenceScore)
+                }
+                startActivity(intent)
+            } else {
+                showToast(detectedResult)
+            }
+        }
 
         imageClassifierHelper = ImageClassifierHelper(
             context = this,
@@ -59,6 +99,7 @@ class MainActivity : AppCompatActivity(), ImageClassifierHelper.ClassifierListen
             currentImageUri = uri
             showImage()
             imageCrop(uri)
+            viewModel.setCurrentImageUri(uri)
         } else {
             Log.d("Photo Picker", "No media selected")
         }
@@ -101,6 +142,7 @@ class MainActivity : AppCompatActivity(), ImageClassifierHelper.ClassifierListen
             imageCrop?.let {
                 currentImageUri = it
                 showImage()
+                viewModel.setCurrentImageUri(it)
             }
         } else if (resultCode == UCrop.RESULT_ERROR) {
             val error = UCrop.getError(data!!)
@@ -143,4 +185,22 @@ class MainActivity : AppCompatActivity(), ImageClassifierHelper.ClassifierListen
     private fun showToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putParcelable(KEY_IMAGE_URI, currentImageUri)
+        val classification = viewModel.classificationResult.value
+        if (classification != null) {
+            outState.putString(KEY_CLASSIFICATION_RESULT, classification.first)
+            outState.putFloat(KEY_CLASSIFICATION_CONFIDENCE, classification.second)
+        }
+    }
+
+
+    companion object {
+        const val KEY_IMAGE_URI = "KEY_IMAGE_URI"
+        const val KEY_CLASSIFICATION_RESULT = "KEY_CLASSIFICATION_RESULT"
+        const val KEY_CLASSIFICATION_CONFIDENCE = "KEY_CLASSIFICATION_CONFIDENCE"
+    }
+
 }

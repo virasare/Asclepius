@@ -30,7 +30,8 @@ class ResultActivity : AppCompatActivity() {
         val confidenceScore = intent.getFloatExtra(EXTRA_CONFIDENCE_SCORE, -1f)
 
         if (confidenceScore != -1f) {
-            val resultWithConfidence = getString(R.string.result_with_confidence, displayResultText, confidenceScore)
+            val confidencePercentage = (confidenceScore * 100).toInt()
+            val resultWithConfidence = getString(R.string.result_with_confidence, displayResultText, confidencePercentage)
             binding.resultText.text = resultWithConfidence
         } else {
             binding.resultText.text = displayResultText
